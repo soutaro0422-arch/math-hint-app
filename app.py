@@ -41,18 +41,19 @@ if st.session_state.math_data is None:
                 # アップロードされたファイルをそのままバイトデータとして読み込み
                 bytes_data = img_file.getvalue()
                 
+                # プロンプトの部分を以下のように書き換えます
                 prompt = """
                 添付された画像にある、印刷された数学の問題を1問だけ認識し、解いてください。
-                ユーザーが自力で解くためのアプリに使用するため、絶対に最初から最終的な答えを見せてはいけません。
-                必ず以下のJSONフォーマットのみ（余計な解説の文字やマークダウンの囲みは一切なし）で出力してください。
-                数式を表現する場合は、Streamlitの仕様に合わせて、前後に $ を付けたプレーンなテキスト（例: $x^2 + 2x = 0$）にしてください。
-                
+                必ず以下のJSONフォーマットのみ（余計な解説の文字や挨拶は一切なし）で出力してください。
+                各ヒントには、絶対に最終的な答え（数値など）を含めないでください。
+
                 {
-                  "problem_text": "認識した問題のテキスト",
-                  "hint_1": "この問題に取り組むための最初の1手や、思い出すべき公式（答えは絶対に書かない）",
-                  "hint_2": "具体的な方針や、計算の次のステップへのアドバイス（答えは絶対に書かない）",
-                  "steps": "正しい途中式のプロセス（1行ずつ改行 '\\n' を挟んでください）",
-                  "final_answer": "最終的な答え"
+                "problem_text": "認識した問題のテキスト（LaTeX数式を使用）",
+                "hint_formula": "【公式・基礎】この問題を解くために必要な数学の定義、公式、定理の説明（1行）",
+                "hint_first_step": "【最初の一歩】解法を開始するための、最初の1手や式変形の方針（1行）",
+                "hint_trap": "【計算のコツ】符号のミスや、展開の際に受験生がひっかかりやすい落とし穴・注意点（1行）",
+                "steps": "正しい途中式のプロセス。改行は「\\n」で表現してください。",
+                "final_answer": "最終的な答え"
                 }
                 """
                 
@@ -75,29 +76,42 @@ if st.session_state.math_data is None:
                 st.caption(f"エラー詳細: {e}")
 
 # ---- STEP 2: 段階的なヒント表示画面 ----
+# ---- 修正後の「ヒントと解説」の画面表示部分 ----
 else:
     data = st.session_state.math_data
     
-    st.markdown("### 📝 認識された問題")
+    st.markdown("### 📋 認識した問題")
     st.info(data['problem_text'])
-    
-    st.markdown("### 💡 段階的ヒント")
-    st.write("上から順番に開けて、自力で解けるかチャレンジしてみよう！")
-    
-    with st.expander("🔍 【Level 1】 最初のヒント（公式・着眼点）"):
-        st.markdown(f"### 💡 ヒント 1\n{data['hint_1']}")
-        
-    with st.expander("⚡ 【Level 2】 もう一押しのヒント（計算の方針）"):
-        st.markdown(f"### 🧭 ヒント 2\n{data['hint_2']}")
-        
-    with st.expander("🎯 【Level 3】 途中式と最終解答"):
-        st.markdown("### 🛠️ 途中式（解法のプロセス）")
-        st.markdown(data['steps'])
-        
-        st.markdown("---")
-        st.markdown(f"### 🎯 最終解答\n**{data['final_answer']}**")
-
     st.write("---")
-    if st.button("🔄 別の問題を撮影する", use_container_width=True, type="secondary"):
-        reset_app()
+    
+    st.markdown("### 💡 えらべるヒント")
+    st.write("今のあなたの状態に合わせて、欲しいヒントのタブを切り替えてね！")
+    
+    # 3つのタブを作成
+    tab1, tab2, tab3 = st.tabs(["① 使う公式がわからない", "② 最初の一歩が知りたい", "③ 計算の注意点を知りたい"])
+    
+    with tab1:
+        st.markdown(f"**📚 必要になる基礎・公式:**\n\n{data['hint_formula']}")
+        
+    with tab2:
+        st.markdown(f"**🚀 攻略の手がかり:**\n\n{data['hint_first_step']}")
+        
+    with tab3:
+        st.markdown(f"**⚠️ ここでミスしやすい！:**\n\n{data['hint_trap']}")
+        
+    # 「答えを見る」は今まで通りボタンを押した後に表示させる制御にする
+    st.write("---")
+    if st.session_state.app_state != "answer":
+        if st.button("完全にギブアップ！答えと途中式を見る 👁️", use_container_width=True):
+            st.session_state.app_state = "answer"
+            st.rerun()
+            
+    if st.session_state.app_state == "answer":
+        st.success("**📝 途中式と最終解答:**")
+        st.markdown(data['steps'])
+        st.subheader(f"🎯 答え: {data['final_answer']}")
+
+    # 「別の問題を撮る」ボタン
+    st.write("---")
+    if st.button("別の問題を撮る 🔄", on_click=reset_app, use_container_width=True):
         st.rerun()
