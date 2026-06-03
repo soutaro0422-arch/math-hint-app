@@ -42,23 +42,35 @@ if st.session_state.math_data is None:
                 bytes_data = img_file.getvalue()
                 
                 # プロンプトの部分を以下のように書き換えます
+                # プロンプトはシンプルに役割を伝えるだけでOKになります
                 prompt = """
                 添付された画像にある、印刷された数学の問題を1問だけ認識し、解いてください。
-                必ず以下のJSONフォーマットのみ（余計な解説の文字や挨拶は一切なし）で出力してください。
                 各ヒントには、絶対に最終的な答え（数値など）を含めないでください。
-
-                {
-                "problem_text": "認識した問題のテキスト（LaTeX数式を使用）",
-                "hints": [
-                {
-                "title": "公式・基礎、補助線の引き方、分類のコツなど、問題に最適なアプローチ名",
-                "content": "そのヒントの具体的な内容（1行、絶対に最終的な答えは含めない）"
-                },
-                ...（問題の難易度や性質に応じて、最適な数（2〜4個）だけ配列として出力）
-                ],
-                "steps": "正しい途中式のプロセス。改行は「\\n」で表現してください。",
-                "final_answer": "最終的な答え"
                 """
+                
+                # 💡 解決策：AIが返すJSONの「型（スキーマ）」を厳密に定義する
+                # これにより、指定したキー以外は絶対に返ってこなくなります
+                response_schema = {
+                    "type": "OBJECT",
+                    "properties": {
+                        "problem_text": {"type": "STRING", "description": "認識した問題のテキスト（LaTeX数式を使用）"},
+                        "hints": {
+                            "type": "ARRAY",
+                            "items": {
+                                "type": "OBJECT",
+                                "properties": {
+                                    "title": {"type": "STRING", "description": "公式・基礎、補助線の引き方など最適なアプローチ名"},
+                                    "content": {"type": "STRING", "description": "ヒントの具体的な内容（1行、最終解答は含めない）"}
+                                },
+                                "required": ["title", "content"]
+                            },
+                            "description": "問題の難易度や性質に応じた2〜4個のヒント配列"
+                        },
+                        "steps": {"type": "STRING", "description": "正しい途中式のプロセス。改行は「\\n」で表現。"},
+                        "final_answer": {"type": "STRING", "description": "最終的な答え"}
+                    },
+                    "required": ["problem_text", "hints", "steps", "final_answer"]
+                }
                 
                 response = client.models.generate_content(
                     model='gemini-2.5-flash',
@@ -68,15 +80,24 @@ if st.session_state.math_data is None:
                     ],
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
+                        # 💡 ここでスキーマを流し込む
+                        response_schema=response_schema,
                     ),
                 )
                 
-                st.session_state.math_data = json.loads(response.text)
-                st.rerun()
+                # 💡 念のための対策：もし文字列の前後に ```json などが含まれていたら剥ぎ取る
+                raw_text = response.text.strip()
+                if raw_text.startswith("```"):
+                    # 最初と最後の行（```json と ```）を削る
+                    lines = raw_text.splitlines()
+                    if lines[0].startswith("```"):
+                        lines = lines[1:]
+                    if lines[-1].startswith("```"):
+                        lines = lines[:-1]
+                    raw_text = "\n".join(lines).strip()
                 
-            except Exception as e:
-                st.error("解析エラーが発生しました。写真がボケていないか確認して、もう一度試してください。")
-                st.caption(f"エラー詳細: {e}")
+                st.session_state.math_data = json.loads(raw_text)
+                st.rerun()
 
 # ---- STEP 2: 段階的なヒント表示画面 ----
 else:
