@@ -4,6 +4,8 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
 from typing import List
+from PIL import Image
+import io
 
 # ページ設定
 st.set_page_config(
@@ -28,8 +30,7 @@ def full_reset():
     st.session_state.math_data = None
     st.session_state.show_answer = False
 
-# 💡 解決策1: Pydanticを使ってスキーマを定義する
-# 辞書型（dict）でスキーマを書くよりも、こちらの方がSDK側で確実にパースされます
+# スキーマ定義
 class HintItem(BaseModel):
     title: str = Field(description="公式・基礎、補助線の引き方など問題に最適なアプローチ名")
     content: str = Field(description="ヒントの具体的な内容（1行、最終解答は含めない）")
@@ -53,12 +54,26 @@ if st.session_state.math_data is None:
     if img_file:
         with st.spinner("✨ AIが問題を解析しています。しばらくお待ちください..."):
             try:
-                # バイトデータの読み込み
-                bytes_data = img_file.getvalue()
+                # 💡 解決策: 画像を適切なサイズにリサイズ & 強め圧縮する
+                # 1. アップロードされた画像をPillowで開く
+                image = Image.open(img_file)
                 
-                # 💡 解決策2: 画像のMIMEタイプを動的に取得する
-                # PNG画像を jpeg として送るとAI側で読み取りエラー（解析エラー）になることがあります
-                mime_type = img_file.type if img_file.type else "image/jpeg"
+                # 2. 最大長辺を 1280px に制限（文字認識にはこれで十分な高画質です）
+                max_size = 1280
+                if max(image.size) > max_size:
+                    image.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+                
+                # 3. 圧縮した画像をバイトデータに変換（JPEG形式、画質85%に落として軽量化）
+                buffer = io.BytesIO()
+                # 透過情報（RGBA）があるPNG対策で、RGBに変換して保存
+                if image.mode in ("RGBA", "P"):
+                    image = image.convert("RGB")
+                    
+                image.save(buffer, format="JPEG", quality=85)
+                bytes_data = buffer.getvalue()
+                
+                # 圧縮したので、MIMEタイプは一律 image/jpeg でOKになります
+                mime_type = "image/jpeg"
                 
                 prompt = """
                 添付された画像にある、印刷された数学の問題を1問だけ認識し、解いてください。
@@ -73,16 +88,12 @@ if st.session_state.math_data is None:
                     ],
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
-                        # Pydanticモデルをそのままスキーマに渡す
                         response_schema=MathResponseSchema,
-                        temperature=0.1, # 💡 回答のブレ（構造の崩れ）を防ぐために低めに設定
+                        temperature=0.1,
                     ),
                 )
                 
-                # 受信データのパースと検証
                 raw_text = response.text.strip()
-                
-                # 念のためのマークダウン剥ぎ取り
                 if raw_text.startswith("```"):
                     lines = raw_text.splitlines()
                     if lines[0].startswith("```"):
@@ -91,7 +102,6 @@ if st.session_state.math_data is None:
                         lines = lines[:-1]
                     raw_text = "\n".join(lines).strip()
                 
-                # JSONとしてロードしてセッションに格納
                 st.session_state.math_data = json.loads(raw_text)
                 st.rerun()
                 
@@ -113,7 +123,6 @@ else:
     st.markdown("### 💡 ヒントを見てみよう")
     st.write("上から順番に読んでいくと、自力で解けるようになるよ！")
     
-    # ヒントの表示
     hints = data.get("hints", [])
     if hints and isinstance(hints, list):
         for i, hint in enumerate(hints):
@@ -126,7 +135,6 @@ else:
         
     st.write("---")
     
-    # 答えの表示制御
     if not st.session_state.show_answer:
         if st.button("完全にギブアップ！答えと途中式を見る 👁️", use_container_width=True):
             st.session_state.show_answer = True
@@ -137,7 +145,6 @@ else:
         st.markdown(data.get('steps', '途中式がありません。'))
         st.subheader(f"🎯 答え: {data.get('final_answer', '解答がありません。')}")
 
-    # 「別の問題を撮る」ボタン
     st.write("---")
     if st.button("別の問題を撮る 🔄", on_click=full_reset, use_container_width=True):
         st.rerun()
