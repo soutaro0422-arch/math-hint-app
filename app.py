@@ -36,7 +36,7 @@ if st.session_state.math_data is None:
     )
     
     if img_file:
-        with st.spinner("✨ AIが問題を解析しています。答えは隠しているので安心してください..."):
+        with st.spinner("✨ AIが問題を解析しています。しばらくお待ちください..."):
             try:
                 # アップロードされたファイルをそのままバイトデータとして読み込み
                 bytes_data = img_file.getvalue()
@@ -49,12 +49,15 @@ if st.session_state.math_data is None:
 
                 {
                 "problem_text": "認識した問題のテキスト（LaTeX数式を使用）",
-                "hint_formula": "【公式・基礎】この問題を解くために必要な数学の定義、公式、定理の説明（1行）",
-                "hint_first_step": "【最初の一歩】解法を開始するための、最初の1手や式変形の方針（1行）",
-                "hint_trap": "【計算のコツ】符号のミスや、展開の際に受験生がひっかかりやすい落とし穴・注意点（1行）",
+                "hints": [
+                {
+                "title": "公式・基礎、補助線の引き方、分類のコツなど、問題に最適なアプローチ名",
+                "content": "そのヒントの具体的な内容（1行、絶対に最終的な答えは含めない）"
+                },
+                ...（問題の難易度や性質に応じて、最適な数（2〜4個）だけ配列として出力）
+                ],
                 "steps": "正しい途中式のプロセス。改行は「\\n」で表現してください。",
                 "final_answer": "最終的な答え"
-                }
                 """
                 
                 response = client.models.generate_content(
