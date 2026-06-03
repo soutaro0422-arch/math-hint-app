@@ -79,42 +79,52 @@ if st.session_state.math_data is None:
                 st.caption(f"エラー詳細: {e}")
 
 # ---- STEP 2: 段階的なヒント表示画面 ----
-# ---- 修正後の「ヒントと解説」の画面表示部分 ----
 else:
     data = st.session_state.math_data
     
     st.markdown("### 📋 認識した問題")
-    st.info(data['problem_text'])
+    # LaTeX数式がきれいに表示されるよう st.latex か st.markdown を使用
+    st.markdown(data['problem_text'])
     st.write("---")
     
-    st.markdown("### 💡 えらべるヒント")
-    st.write("今のあなたの状態に合わせて、欲しいヒントのタブを切り替えてね！")
+    st.markdown("### 💡 ヒントを見てみよう")
+    st.write("上から順番に読んでいくと、自力で解けるようになるよ！")
     
-    # 3つのタブを作成
-    tab1, tab2, tab3 = st.tabs(["① 使う公式がわからない", "② 最初の一歩が知りたい", "③ 計算の注意点を知りたい"])
-    
-    with tab1:
-        st.markdown(f"**📚 必要になる基礎・公式:**\n\n{data['hint_formula']}")
+    # 💡 改善のポイント：動的に生成されたヒントの数だけ、折りたたみ（手動開閉型）で表示します
+    # これなら2個でも4個でもエラーにならず、UIもすっきりします
+    if "hints" in data and isinstance(data["hints"], list):
+        for i, hint in enumerate(data["hints"]):
+            # タイトルと中身を取り出す（念のためデフォルト値を用意）
+            title = hint.get("title", f"ヒント {i+1}")
+            content = hint.get("content", "")
+            
+            with st.expander(f"🔍 {title}"):
+                st.markdown(content)
+    else:
+        st.warning("ヒントのデータ形式が正しく取得できませんでした。")
         
-    with tab2:
-        st.markdown(f"**🚀 攻略の手がかり:**\n\n{data['hint_first_step']}")
-        
-    with tab3:
-        st.markdown(f"**⚠️ ここでミスしやすい！:**\n\n{data['hint_trap']}")
-        
-    # 「答えを見る」は今まで通りボタンを押した後に表示させる制御にする
     st.write("---")
-    if st.session_state.app_state != "answer":
+    
+    # 💡 状態管理のバグ防止：「答えを表示するかどうか」のフラグをセッション状態で管理
+    if "show_answer" not in st.session_state:
+        st.session_state.show_answer = False
+
+    if not st.session_state.show_answer:
         if st.button("完全にギブアップ！答えと途中式を見る 👁️", use_container_width=True):
-            st.session_state.app_state = "answer"
+            st.session_state.show_answer = True
             st.rerun()
             
-    if st.session_state.app_state == "answer":
+    if st.session_state.show_answer:
         st.success("**📝 途中式と最終解答:**")
         st.markdown(data['steps'])
         st.subheader(f"🎯 答え: {data['final_answer']}")
 
     # 「別の問題を撮る」ボタン
     st.write("---")
-    if st.button("別の問題を撮る 🔄", on_click=reset_app, use_container_width=True):
+    # 💡 別の問題を撮るときは、答えの表示フラグもリセット
+    def full_reset():
+        st.session_state.math_data = None
+        st.session_state.show_answer = False
+
+    if st.button("別の問題を撮る 🔄", on_click=full_reset, use_container_width=True):
         st.rerun()
