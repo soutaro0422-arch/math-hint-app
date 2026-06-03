@@ -36,7 +36,7 @@ if st.session_state.math_data is None:
     )
     
     if img_file:
-        with st.spinner("✨ AIが問題を解析しています。答えは隠しているので安心してください..."):
+        with st.spinner("✨ AIが問題を解析しています。しばらくお待ちください..."):
             try:
                 # アップロードされたファイルをそのままバイトデータとして読み込み
                 bytes_data = img_file.getvalue()
